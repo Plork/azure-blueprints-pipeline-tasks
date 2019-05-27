@@ -16,17 +16,18 @@ function Get-BlueprintURI {
 
         [void]$sb.Append($ManagementGroupBaseURI)
         [void]$sb.Append($APIVersion)
-        [void]$sb.replace('{0}',$ManagementGroup)
-        [void]$sb.replace('{1}',$BlueprintName)
+        [void]$sb.replace('{0}', $ManagementGroup)
+        [void]$sb.replace('{1}', $BlueprintName)
 
         return $sb.ToString()
 
-    } ElseIf ($Scope -eq "Subscription") {
+    }
+    ElseIf ($Scope -eq "Subscription") {
 
         [void]$sb.Append($SubscriptionBaseURI)
         [void]$sb.Append($APIVersion)
-        [void]$sb.replace('{0}',$SubscriptionID)
-        [void]$sb.replace('{1}',$BlueprintName)
+        [void]$sb.replace('{0}', $SubscriptionID)
+        [void]$sb.replace('{1}', $BlueprintName)
 
         return $sb.ToString()
     }
@@ -48,18 +49,19 @@ function Get-BlueprintVersionsURI {
         [void]$sb.Append($ManagementGroupBaseURI)
         [void]$sb.Append("/versions")
         [void]$sb.Append($APIVersion)
-        [void]$sb.replace('{0}',$ManagementGroup)
-        [void]$sb.replace('{1}',$BlueprintName)
+        [void]$sb.replace('{0}', $ManagementGroup)
+        [void]$sb.replace('{1}', $BlueprintName)
 
         return $sb.ToString()
 
-    } ElseIf ($Scope -eq "Subscription") {
+    }
+    ElseIf ($Scope -eq "Subscription") {
 
         [void]$sb.Append($SubscriptionBaseURI)
         [void]$sb.Append("/versions")
         [void]$sb.Append($APIVersion)
-        [void]$sb.replace('{0}',$SubscriptionID)
-        [void]$sb.replace('{1}',$BlueprintName)
+        [void]$sb.replace('{0}', $SubscriptionID)
+        [void]$sb.replace('{1}', $BlueprintName)
 
         return $sb.ToString()
     }
@@ -81,18 +83,19 @@ function Get-AllArtifactsURI {
         [void]$sb.Append($ManagementGroupBaseURI)
         [void]$sb.Append("/artifacts")
         [void]$sb.Append($APIVersion)
-        [void]$sb.replace('{0}',$ManagementGroup)
-        [void]$sb.replace('{1}',$BlueprintName)
+        [void]$sb.replace('{0}', $ManagementGroup)
+        [void]$sb.replace('{1}', $BlueprintName)
 
         return $sb.ToString()
 
-    } ElseIf ($Scope -eq "Subscription") {
+    }
+    ElseIf ($Scope -eq "Subscription") {
 
         [void]$sb.Append($SubscriptionBaseURI)
         [void]$sb.Append("/artifacts")
         [void]$sb.Append($APIVersion)
-        [void]$sb.replace('{0}',$SubscriptionID)
-        [void]$sb.replace('{1}',$BlueprintName)
+        [void]$sb.replace('{0}', $SubscriptionID)
+        [void]$sb.replace('{1}', $BlueprintName)
 
         return $sb.ToString()
     }
@@ -116,19 +119,20 @@ function Get-ArtifactURI {
         [void]$sb.Append("/artifacts/")
         [void]$sb.Append($ArtifactName)
         [void]$sb.Append($APIVersion)
-        [void]$sb.replace('{0}',$ManagementGroup)
-        [void]$sb.replace('{1}',$BlueprintName)
+        [void]$sb.replace('{0}', $ManagementGroup)
+        [void]$sb.replace('{1}', $BlueprintName)
 
         return $sb.ToString()
 
-    } ElseIf ($Scope -eq "Subscription") {
+    }
+    ElseIf ($Scope -eq "Subscription") {
 
         [void]$sb.Append($SubscriptionBaseURI)
         [void]$sb.Append("/artifacts/")
         [void]$sb.Append($ArtifactName)
         [void]$sb.Append($APIVersion)
-        [void]$sb.replace('{0}',$SubscriptionID)
-        [void]$sb.replace('{1}',$BlueprintName)
+        [void]$sb.replace('{0}', $SubscriptionID)
+        [void]$sb.replace('{1}', $BlueprintName)
 
         return $sb.ToString()
     }
@@ -152,19 +156,20 @@ function Get-PublishBlueprintURI {
         [void]$sb.Append("/versions/")
         [void]$sb.Append($BlueprintVersion)
         [void]$sb.Append($APIVersion)
-        [void]$sb.replace('{0}',$ManagementGroup)
-        [void]$sb.replace('{1}',$BlueprintName)
+        [void]$sb.replace('{0}', $ManagementGroup)
+        [void]$sb.replace('{1}', $BlueprintName)
 
         return $sb.ToString()
 
-    } ElseIf ($Scope -eq "Subscription") {
+    }
+    ElseIf ($Scope -eq "Subscription") {
 
         [void]$sb.Append($SubscriptionBaseURI)
         [void]$sb.Append("/versions/")
         [void]$sb.Append($BlueprintVersion)
         [void]$sb.Append($APIVersion)
-        [void]$sb.replace('{0}',$SubscriptionID)
-        [void]$sb.replace('{1}',$BlueprintName)
+        [void]$sb.replace('{0}', $SubscriptionID)
+        [void]$sb.replace('{1}', $BlueprintName)
 
         return $sb.ToString()
     }

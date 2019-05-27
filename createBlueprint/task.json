@@ -13,8 +13,8 @@
 	"author": "Neil Peterson",
 	"version": {
 		"Major": 1,
-		"Minor": 3,
-		"Patch": 1
+		"Minor": 4,
+		"Patch": 0
 	},
 	"instanceNameFormat": "Create Azure Blueprint",
 	"inputs": [{
@@ -39,7 +39,7 @@
 		},
 		{
 			"name": "BlueprintPath",
-			"type": "string",
+			"type": "filePath",
 			"label": "Blueprint Path (JSON)",
 			"defaultValue": "",
 			"required": true,
@@ -47,7 +47,7 @@
 		},
 		{
 			"name": "ArtifactsPath",
-			"type": "string",
+			"type": "filePath",
 			"label": "Artifacts Path",
 			"defaultValue": "",
 			"required": false,

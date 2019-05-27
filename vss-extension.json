@@ -4,7 +4,7 @@
 	"version": "1.3.1",
 	"name": "Azure Blueprints Dev",
 	"description": "A VSTS Build Task that creates and assigns Azure Blueprints.",
-	"publisher": "nepeters",
+	"publisher": "mbezemer",
 	"categories": [
 		"Azure Pipelines"
 	],

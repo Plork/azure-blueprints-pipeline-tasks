@@ -18,78 +18,78 @@ $ClientId = $Endpoint.Auth.Parameters.ServicePrincipalId
 $ClientSecret = $Endpoint.Auth.Parameters.ServicePrincipalKey
 
 # Get Service connection details
-$BlueprintManagementGroup = $Endpoint.Data.managementGroupId
-$SubscriptionID = $Endpoint.Data.SubscriptionId
+$BlueprintManagementGroupId = $Endpoint.Data.managementGroupId
 
 # Get Blueprint Assignment details
 $BlueprintName = Get-VstsInput -Name BlueprintName
+$BlueprintVersion = Get-VstsInput -Name BlueprintVersion
 $ParametersFilePath = Get-VstsInput -Name ParametersFile
 $TargetSubscriptionID = Get-VstsInput -Name SubscriptionID
 $Wait = Get-VstsInput -Name Wait
 $Timeout = Get-VstsInput -Name Timeout
 
-# Get Parameters File Path
-$ParametersFilePath = $env:SYSTEM_DEFAULTWORKINGDIRECTORY + $ParametersFilePath
+$Body = Get-Content -Raw -Path $ParametersFilePath | ConvertFrom-Json
 
-# Get Access Token
-$Resource = "https://management.core.windows.net/"
-$RequestAccessTokenUri = 'https://login.microsoftonline.com/{0}/oauth2/token' -f $TenantId
-$body = "grant_type=client_credentials&client_id={0}&client_secret={1}&resource={2}" -f $ClientId, $ClientSecret , $Resource
-$Token = Invoke-RestMethod -Method Post -Uri $RequestAccessTokenUri -Body $body
+$AuthenticationToken = Get-AuthenticationToken -TenantId $TenantId -ClientId $ClientId -ClientSecret $ClientSecret
 
-# Header for all REST calls
-$Headers = @{}
-$Headers.Add("Authorization","$($Token.token_type) "+ " " + "$($Token.access_token)")
-$body = Get-Content -Raw -Path $ParametersFilePath | ConvertFrom-Json
-
-# If scoped to Management Group, try and find Blueprint (ID).
-if ($BlueprintManagementGroup) {
-    $BlueprintURIManagementGroup = Get-BlueprintURI -Scope "ManagementGroup" -ManagementGroup $BlueprintManagementGroup -BlueprintName $BlueprintName
-    try {
-        $BlueprintID = Invoke-RestMethod -Method GET -Uri $BlueprintURIManagementGroup -Headers $Headers -ContentType "application/json"
-    } catch {
-        Write-Host "Blueprint not found at Managemnt Group, trying Subscription"
+If ($BlueprintVersion -eq 'latest') {
+    $BlueprintParams = @{
+        LatestPublished = $true
+    }
+}
+else {
+    $BlueprintParams = @{
+        BlueprintVersion = $BlueprintVersion
     }
 }
 
-# Check Subscription for the Blueprint (ID). If found at both MG and Subscription, use Subscription.
-$BlueprintURISubscription = Get-BlueprintURI -Scope "Subscription" -SubscriptionID $TargetSubscriptionID -BlueprintName $BlueprintName
-
 try {
-    $BlueprintID = Invoke-RestMethod -Method GET -Uri $BlueprintURISubscription -Headers $Headers -ContentType "application/json"
-} catch {
-    if (!$BlueprintID) {
-        Write-Host "Blueprint not found at subscription"
-        Exit
-    }
+    $BlueprintID = Get-Blueprint "Subscription" -SubscriptionID $TargetSubscriptionID -BlueprintName $BlueprintName @BlueprintParams -AuthenticationToken $AuthenticationToken
+}
+catch {
+	Write-Host "Blueprint not found at Subscription"
+
+    if ($BlueprintManagementGroupId) {
+        try {
+            $BlueprintID = Get-Blueprint -Scope "ManagementGroup" -ManagementGroupId $BlueprintManagementGroupId -BlueprintName $BlueprintName @BlueprintParams -AuthenticationToken $AuthenticationToken
+        }
+        catch {
+            Write-Host "Blueprint not found at Management Group"
+        }
+	}
+}
+
+if (!$BlueprintID) {
+    Write-Host "No blueprint found"
+    Exit
 }
 
 # Update Assignment body with Blueprint ID
-$body.properties.blueprintId = $BlueprintID.id
+$Body.properties.blueprintId = $BlueprintID.id
 
 # Create Assignment
 $BPAssign = Get-BlueprintAssignmentURI -SubscriptionID $TargetSubscriptionID -BlueprintName $BlueprintName
-$body = $body  | ConvertTO-JSON -Depth 4
-Invoke-RestMethod -Method PUT -Uri $BPAssign -Headers $Headers -Body $body -ContentType "application/json"
+$Body = $Body | ConvertTo-Json -Depth 4
+Invoke-BlueprintRestMethod -Method PUT -Uri $BPAssign -AuthenticationToken $AuthenticationToken -Body $body
 
 # Wait for Assignment
 if ($Wait -eq "true") {
 
     # Timeout logic
-    $timeout = new-timespan -Seconds $Timeout
-    $sw = [diagnostics.stopwatch]::StartNew()
+    $Timeout = New-TimeSpan -Seconds $Timeout
+    $StopWatch = [diagnostics.stopwatch]::StartNew()
 
-    while ($sw.elapsed -lt $timeout){
+    while ($StopWatch.elapsed -lt $Timeout) {
 
         # Get Assignment Operation ID
         $AssignmentOperations = Get-BlueprintAssignmentOperationURI -SubscriptionID $TargetSubscriptionID -BlueprintName $BlueprintName
-        $Assignment = Invoke-RestMethod -Method GET -Uri $AssignmentOperations -Headers $Headers -ContentType "application/json"
+        $Assignment = Invoke-BlueprintRestMethod -Uri $AssignmentOperations -AuthenticationToken $AuthenticationToken
 
         # Get Assignment Status
         $AssignmentStatus = Get-BlueprintAssignmentStatusURI -SubscriptionID $TargetSubscriptionID -BlueprintName $BlueprintName -AssignmentOperationID $Assignment.value[0].name
 
         Do {
-            $Status = Invoke-RestMethod -Method GET -Uri $AssignmentStatus -Headers $Headers -ContentType "application/json"
+            $Status = Invoke-BlueprintRestMethod -Uri $AssignmentStatus -AuthenticationToken $AuthenticationToken
 
             if ($Status.properties.assignmentState -eq "failed") {
                 Write-Error $Status.properties.deployments.result.error.message
