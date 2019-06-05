@@ -37,9 +37,17 @@
 			"required": true,
 			"helpMarkDown": "Blueprint name."
 		},
+        {
+            "name": "Version",
+            "type": "string",
+			"label": "Blueprint version",
+			"defaultValue": "latest",
+            "required": false,
+            "helpMarkDown": "Blueprint version. By default the latest published version is used"
+        },
 		{
 			"name": "ParametersFile",
-			"type": "string",
+			"type": "filePath",
 			"label": "Parameters File Path",
 			"defaultValue": "",
 			"required": true,

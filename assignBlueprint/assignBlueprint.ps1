@@ -10,94 +10,120 @@
 # Helper functions
 Import-Module ./helperFunctions.psm1
 
-# Get authentication details
 $ConnectedServiceName = Get-VstsInput -Name ConnectedServiceName
 $Endpoint = Get-VstsEndpoint -Name $ConnectedServiceName
-$TenantId = $Endpoint.Auth.Parameters.tenantid
-$ClientId = $Endpoint.Auth.Parameters.ServicePrincipalId
-$ClientSecret = $Endpoint.Auth.Parameters.ServicePrincipalKey
 
-# Get Service connection details
-$BlueprintManagementGroup = $Endpoint.Data.managementGroupId
-$SubscriptionID = $Endpoint.Data.SubscriptionId
+$BlueprintManagementGroupId = $Endpoint.Data.managementGroupId
 
-# Get Blueprint Assignment details
 $BlueprintName = Get-VstsInput -Name BlueprintName
+$BlueprintVersion = Get-VstsInput -Name Version
 $ParametersFilePath = Get-VstsInput -Name ParametersFile
 $TargetSubscriptionID = Get-VstsInput -Name SubscriptionID
 $Wait = Get-VstsInput -Name Wait
 $Timeout = Get-VstsInput -Name Timeout
 
-# Get Parameters File Path
-$ParametersFilePath = $env:SYSTEM_DEFAULTWORKINGDIRECTORY + $ParametersFilePath
+Set-ExecutionPolicy -ExecutionPolicy Unrestricted
+Install-Module -Name Az -Repository PSGallery -AllowClobber -Force
+Uninstall-AzureRM
+Write-Host "Successfully installed Az module"
 
-# Get Access Token
-$Resource = "https://management.core.windows.net/"
-$RequestAccessTokenUri = 'https://login.microsoftonline.com/{0}/oauth2/token' -f $TenantId
-$body = "grant_type=client_credentials&client_id={0}&client_secret={1}&resource={2}" -f $ClientId, $ClientSecret , $Resource
-$Token = Invoke-RestMethod -Method Post -Uri $RequestAccessTokenUri -Body $body
+Install-Module -Name Az.Blueprint -AllowClobber -Force
+Write-Host "Successfully installed Az.Blueprint module"
 
-# Header for all REST calls
-$Headers = @{}
-$Headers.Add("Authorization","$($Token.token_type) "+ " " + "$($Token.access_token)")
-$body = Get-Content -Raw -Path $ParametersFilePath | ConvertFrom-Json
+. "./ps_modules/CommonScripts/Utility.ps1"
+$targetAzurePs = Get-RollForwardVersion -azurePowerShellVersion $targetAzurePs
 
-# If scoped to Management Group, try and find Blueprint (ID).
-if ($BlueprintManagementGroup) {
-    $BlueprintURIManagementGroup = Get-BlueprintURI -Scope "ManagementGroup" -ManagementGroup $BlueprintManagementGroup -BlueprintName $BlueprintName
-    try {
-        $BlueprintID = Invoke-RestMethod -Method GET -Uri $BlueprintURIManagementGroup -Headers $Headers -ContentType "application/json"
-    } catch {
-        Write-Host "Blueprint not found at Managemnt Group, trying Subscription"
+$authScheme = ''
+try
+{
+	$serviceNameInput = Get-VstsInput -Name ConnectedServiceNameSelector -Default 'ConnectedServiceName'
+	$serviceName = Get-VstsInput -Name $serviceNameInput -Default (Get-VstsInput -Name DeploymentEnvironmentName)
+	if (!$serviceName)
+	{
+			Get-VstsInput -Name $serviceNameInput -Require
+	}
+
+	$endpoint = Get-VstsEndpoint -Name $serviceName -Require
+
+	if($endpoint)
+	{
+		$authScheme = $endpoint.Auth.Scheme
+	}
+
+	 Write-Verbose "AuthScheme $authScheme"
+}
+catch
+{
+   $error = $_.Exception.Message
+   Write-Verbose "Unable to get the authScheme $error"
+}
+
+
+
+Import-Module $PSScriptRoot\ps_modules\VstsAzureHelpers_
+Initialize-Azure -azurePsVersion $targetAzurePs -strict
+
+$Body = Get-Content -Raw -Path $ParametersFilePath | ConvertFrom-JsonAsHash
+
+$AzBlueprintParams = @{
+    Name = $BlueprintName
+}
+
+if ($BlueprintVersion -eq "Lastest") {
+    $AzBlueprintParams['LatestPublished'] = $true
+}
+Else {
+    $AzBlueprintParams['Version'] = $BlueprintVersion
+}
+
+$AzBlueprint = Get-AzBlueprint -SubscriptionId $TargetSubscriptionID @AzBlueprintParams -ErrorAction SilentlyContinue
+if ([String]::IsNullOrEmpty($AzBlueprint) -eq $true) {
+    Write-Host "Blueprint not found at Subscription, trying Management Group"
+    if ($BlueprintManagementGroupId) {
+        $AzBlueprint = Get-AzBlueprint -ManagementGroupId $BlueprintManagementGroupId @AzBlueprintParams -ErrorAction Stop
+    }
+    else {
+        Throw "Blueprint not found at Management Group"
     }
 }
 
-# Check Subscription for the Blueprint (ID). If found at both MG and Subscription, use Subscription.
-$BlueprintURISubscription = Get-BlueprintURI -Scope "Subscription" -SubscriptionID $TargetSubscriptionID -BlueprintName $BlueprintName
-
-try {
-    $BlueprintID = Invoke-RestMethod -Method GET -Uri $BlueprintURISubscription -Headers $Headers -ContentType "application/json"
-} catch {
-    if (!$BlueprintID) {
-        Write-Host "Blueprint not found at subscription"
-        Exit
-    }
+$AzBlueprintAssignmentParams = @{
+    SubscriptionId = $TargetSubscriptionID
+    Name           = ("Assignment-{0}" -f $azBlueprint.Name)
 }
 
-# Update Assignment body with Blueprint ID
-$body.properties.blueprintId = $BlueprintID.id
+$AzBlueprintAssignment = Get-AzBlueprintAssignment @AzBlueprintAssignmentParams -ErrorAction SilentlyContinue
 
-# Create Assignment
-$BPAssign = Get-BlueprintAssignmentURI -SubscriptionID $TargetSubscriptionID -BlueprintName $BlueprintName
-$body = $body  | ConvertTO-JSON -Depth 4
-Invoke-RestMethod -Method PUT -Uri $BPAssign -Headers $Headers -Body $body -ContentType "application/json"
+if ($Body['properties']['resourceGroups'].Keys.Count -ne 0) {
+    $AzBlueprintAssignmentParams['ResourceGroupParameter'] = $Body['properties']['resourceGroups']
+}
 
-# Wait for Assignment
+if ($Body['properties']['parameters'].Keys.Count -ne 0) {
+    $AzBlueprintAssignmentParams['Parameter'] = $Body['properties']['parameters']
+}
+
+if ([String]::IsNullOrEmpty($AzBlueprintAssignment) -eq $true) {
+    New-AzBlueprintAssignment @AzBlueprintAssignmentParams -Blueprint $azBlueprint -Location $Body['location'] -SystemAssignedIdentity
+}
+Else {
+    Set-AzBlueprintAssignment @AzBlueprintAssignmentParams -Blueprint $azBlueprint -Location $Body['location'] -SystemAssignedIdentity
+}
+
 if ($Wait -eq "true") {
+    $timeout = New-TimeSpan -Seconds $Timeout
+    $stopwatch = [diagnostics.stopwatch]::StartNew()
 
-    # Timeout logic
-    $timeout = new-timespan -Seconds $Timeout
-    $sw = [diagnostics.stopwatch]::StartNew()
-
-    while ($sw.elapsed -lt $timeout){
-
-        # Get Assignment Operation ID
-        $AssignmentOperations = Get-BlueprintAssignmentOperationURI -SubscriptionID $TargetSubscriptionID -BlueprintName $BlueprintName
-        $Assignment = Invoke-RestMethod -Method GET -Uri $AssignmentOperations -Headers $Headers -ContentType "application/json"
-
-        # Get Assignment Status
-        $AssignmentStatus = Get-BlueprintAssignmentStatusURI -SubscriptionID $TargetSubscriptionID -BlueprintName $BlueprintName -AssignmentOperationID $Assignment.value[0].name
-
+    while ($stopwatch.elapsed -lt $timeout) {
         Do {
-            $Status = Invoke-RestMethod -Method GET -Uri $AssignmentStatus -Headers $Headers -ContentType "application/json"
+            $Status = Get-AzBlueprintAssignment -SubscriptionId $TargetSubscriptionID -Name ("Assignment-{0}" -f 'commonPolicies')
 
-            if ($Status.properties.assignmentState -eq "failed") {
+            if ($Status.ProvisioningState -eq "Failed") {
                 Write-Error $Status.properties.deployments.result.error.message
                 break
             }
 
-            Sleep 5
+            sleep 5
 
-        } while ($Status.properties.assignmentState -ne "succeeded")
+        } while ($Status.ProvisioningState -ne "succeeded")
     }
 }
